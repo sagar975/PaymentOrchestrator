@@ -25,9 +25,6 @@ public class GatewayResponse {
         this.errorMessage = builder.errorMessage;
         this.rawResponse = builder.rawResponse;
     }
-
-
-
     /**
      * Creates a successful gateway response.
      *
