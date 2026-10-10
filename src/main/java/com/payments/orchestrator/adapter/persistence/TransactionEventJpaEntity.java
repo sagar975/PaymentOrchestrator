@@ -1,9 +1,11 @@
 package com.payments.orchestrator.adapter.persistence;
+
 import com.payments.orchestrator.domain.model.TransactionStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -14,16 +16,18 @@ import java.util.UUID;
  * Maps to transaction_events table — stores complete audit trail
  * of every state transition a transaction goes through.
  * Records are never deleted — permanent audit history.
+ * <p>
+ * Implements Persistable to correctly handle INSERT
+ * when ID is pre-assigned from domain layer.
  */
 @Entity
 @Table(name = "transaction_events")
 @Getter
 @Setter
 @NoArgsConstructor
+public class TransactionEventJpaEntity implements Persistable<UUID> {
 
-public class TransactionEventJpaEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -46,4 +50,17 @@ public class TransactionEventJpaEntity {
 
     @Column(name = "occurred_at", nullable = false, updatable = false)
     private LocalDateTime occurredAt;
+
+    @Transient
+    private boolean isNew = true;
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
+    }
 }

@@ -20,6 +20,9 @@ import java.util.UUID;
  * <p>
  * The domain layer never knows JPA exists — it only sees
  * TransactionRepositoryPort interface.
+ * <p>
+ * Uses Persistable pattern to correctly handle INSERT vs UPDATE
+ * when domain layer pre-assigns UUIDs.
  */
 @Slf4j
 @Component
@@ -78,9 +81,13 @@ public class TransactionRepositoryAdapter implements TransactionRepositoryPort {
 
     /**
      * Converts domain Transaction to JPA entity for persistence.
+     * Loads existing entity from DB if present — preserves isNew=false
+     * so JPA correctly does UPDATE instead of INSERT for existing records.
      */
     private TransactionJpaEntity toEntity(Transaction transaction) {
-        TransactionJpaEntity entity = new TransactionJpaEntity();
+        TransactionJpaEntity entity = transactionRepository
+                .findById(transaction.getId())
+                .orElse(new TransactionJpaEntity());
         entity.setId(transaction.getId());
         entity.setMerchantId(transaction.getMerchantId());
         entity.setAmount(transaction.getAmount());
@@ -116,6 +123,7 @@ public class TransactionRepositoryAdapter implements TransactionRepositoryPort {
 
     /**
      * Converts domain TransactionEvent to JPA entity.
+     * Events are always new — never updated after creation.
      */
     private TransactionEventJpaEntity toEventEntity(TransactionEvent event) {
         TransactionEventJpaEntity entity = new TransactionEventJpaEntity();

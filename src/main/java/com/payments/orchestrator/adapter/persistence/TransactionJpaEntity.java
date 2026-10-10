@@ -5,26 +5,30 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.domain.Persistable;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
 /**
  * JPA entity representing a transaction row in the database.
  * <p>
  * This class exists solely for persistence concerns.
  * Business logic lives in domain/model/Transaction.java.
  * Conversion between the two is handled by TransactionRepositoryAdapter.
+ * <p>
+ * Implements Persistable to correctly handle INSERT vs UPDATE
+ * when ID is pre-assigned from domain layer.
  */
-
 @Entity
 @Table(name = "transactions")
 @Getter
 @Setter
 @NoArgsConstructor
-public class TransactionJpaEntity {
+public class TransactionJpaEntity implements Persistable<UUID> {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -55,4 +59,17 @@ public class TransactionJpaEntity {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @Transient
+    private boolean isNew = true;
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostLoad
+    void markNotNew() {
+        this.isNew = false;
+    }
 }

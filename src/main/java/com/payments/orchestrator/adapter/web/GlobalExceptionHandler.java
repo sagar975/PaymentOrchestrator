@@ -4,9 +4,11 @@ import com.payments.orchestrator.domain.exception.PaymentException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,6 +45,42 @@ public class GlobalExceptionHandler {
                         .error("VALIDATION_FAILED")
                         .message("Request validation failed")
                         .details(errors)
+                        .build());
+    }
+
+    /**
+     * Handles unreadable request bodies — malformed JSON or wrong field types.
+     * Returns 400 Bad Request without exposing parser details.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableMessage(
+            HttpMessageNotReadableException ex) {
+        log.warn("Malformed request body. reason={}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.builder()
+                        .timestamp(LocalDateTime.now())
+                        .status(400)
+                        .error("MALFORMED_REQUEST")
+                        .message("Request body is missing or malformed")
+                        .build());
+    }
+
+    /**
+     * Handles path/query parameters of the wrong type — e.g. non-UUID id.
+     * Returns 400 Bad Request.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex) {
+        log.warn("Invalid parameter. name={}, value={}", ex.getName(), ex.getValue());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.builder()
+                        .timestamp(LocalDateTime.now())
+                        .status(400)
+                        .error("INVALID_PARAMETER")
+                        .message("Invalid value for parameter: " + ex.getName())
                         .build());
     }
 
