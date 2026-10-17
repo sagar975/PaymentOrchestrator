@@ -1,9 +1,12 @@
 package com.payments.orchestrator.domain.service;
 
+import com.payments.orchestrator.domain.exception.GatewayException;
 import com.payments.orchestrator.domain.exception.PaymentException;
+import com.payments.orchestrator.domain.model.GatewayResponse;
 import com.payments.orchestrator.domain.model.Transaction;
 import com.payments.orchestrator.domain.model.TransactionEvent;
 import com.payments.orchestrator.domain.model.TransactionStatus;
+import com.payments.orchestrator.domain.port.GatewayPort;
 import com.payments.orchestrator.domain.port.TransactionRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,16 +23,16 @@ import java.util.UUID;
  * 1. Idempotency check — prevent double charges
  * 2. Transaction creation
  * 3. Persistence
- * 4. Event recording
- * <p>
- * Gateway routing and retry logic will be added in Phase 3.
- * For now — creates and persists transactions correctly.
+ * 4. Gateway routing and authorization
+ * 5. Event recording at every state transition
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrchestrationService {
+
     private final TransactionRepositoryPort transactionRepository;
+    private final GatewayPort gatewayPort;
 
     /**
      * Initiates a new payment transaction.
@@ -46,30 +49,100 @@ public class OrchestrationService {
      * @throws PaymentException if validation fails
      */
     @Transactional
-    public Transaction initiateTransaction(String merchantId, BigDecimal amount, String currency, String idempotencyKey) {
+    public Transaction initiateTransaction(
+            String merchantId,
+            BigDecimal amount,
+            String currency,
+            String idempotencyKey) {
 
-        log.info("Initiating transaction. merchantId={}, amount={}, currency={}", merchantId, amount, currency);
+        log.info("Initiating transaction. merchantId={}, amount={}, currency={}",
+                merchantId, amount, currency);
 
         // Step 1 — check idempotency
-        // if same key + merchant already exists return existing transaction
-        var existing = transactionRepository.findByIdempotencyKeyAndMerchantId(idempotencyKey, merchantId);
+        var existing = transactionRepository
+                .findByIdempotencyKeyAndMerchantId(idempotencyKey, merchantId);
 
         if (existing.isPresent()) {
-            log.info("Duplicate request detected. idempotencyKey={} — " + "returning existing transaction", idempotencyKey);
+            log.info("Duplicate request detected. idempotencyKey={} — " +
+                    "returning existing transaction", idempotencyKey);
             return existing.get();
         }
 
         // Step 2 — create new transaction in domain
-        Transaction transaction = Transaction.create(merchantId, amount, currency, idempotencyKey);
+        Transaction transaction = Transaction.create(
+                merchantId, amount, currency, idempotencyKey);
 
         // Step 3 — persist transaction
         Transaction saved = transactionRepository.save(transaction);
 
-        // Step 4 — record audit event
-        TransactionEvent event = new TransactionEvent(saved.getId(), null, TransactionStatus.INITIATED, null, "Transaction initiated successfully");
-        transactionRepository.saveEvent(event);
+        // Step 4 — record creation event
+        transactionRepository.saveEvent(new TransactionEvent(
+                saved.getId(),
+                null,
+                TransactionStatus.INITIATED,
+                null,
+                "Transaction initiated successfully"));
 
-        log.info("Transaction created successfully. id={}", saved.getId());
+        // Step 5 — transition to ROUTING
+        saved.transitionTo(TransactionStatus.ROUTING);
+        saved.assignGateway(gatewayPort.getGatewayName());
+        saved = transactionRepository.save(saved);
+
+        transactionRepository.saveEvent(new TransactionEvent(
+                saved.getId(),
+                TransactionStatus.INITIATED,
+                TransactionStatus.ROUTING,
+                null,
+                "Routing to " + gatewayPort.getGatewayName()));
+
+        // Step 6 — authorize via gateway
+        try {
+            GatewayResponse response = gatewayPort.authorize(saved);
+
+            if (response.isSuccess()) {
+                saved.transitionTo(TransactionStatus.AUTHORIZED);
+                saved = transactionRepository.save(saved);
+
+                transactionRepository.saveEvent(new TransactionEvent(
+                        saved.getId(),
+                        TransactionStatus.ROUTING,
+                        TransactionStatus.AUTHORIZED,
+                        response.getRawResponse(),
+                        "Authorized by " + gatewayPort.getGatewayName()));
+
+                log.info("Transaction authorized successfully. id={}, gateway={}",
+                        saved.getId(), gatewayPort.getGatewayName());
+
+            } else {
+                saved.markFailed();
+                saved = transactionRepository.save(saved);
+
+                transactionRepository.saveEvent(new TransactionEvent(
+                        saved.getId(),
+                        TransactionStatus.ROUTING,
+                        TransactionStatus.FAILED,
+                        response.getRawResponse(),
+                        "Failed: " + response.getErrorMessage()));
+
+                log.warn("Transaction failed at gateway. id={}, error={}",
+                        saved.getId(), response.getErrorMessage());
+            }
+
+        } catch (GatewayException e) {
+            saved.markFailed();
+            saved = transactionRepository.save(saved);
+
+            transactionRepository.saveEvent(new TransactionEvent(
+                    saved.getId(),
+                    TransactionStatus.ROUTING,
+                    TransactionStatus.FAILED,
+                    null,
+                    "Gateway exception: " + e.getMessage()));
+
+            log.error("Gateway exception during authorization. id={}",
+                    saved.getId(), e);
+        }
+
         return saved;
     }
 
@@ -83,6 +156,9 @@ public class OrchestrationService {
     @Transactional(readOnly = true)
     public Transaction getTransaction(UUID id) {
         log.debug("Retrieving transaction. id={}", id);
-        return transactionRepository.findById(id).orElseThrow(() -> new PaymentException("TRANSACTION_NOT_FOUND", "Transaction not found: " + id));
+        return transactionRepository.findById(id)
+                .orElseThrow(() -> new PaymentException(
+                        "TRANSACTION_NOT_FOUND",
+                        "Transaction not found: " + id));
     }
 }
