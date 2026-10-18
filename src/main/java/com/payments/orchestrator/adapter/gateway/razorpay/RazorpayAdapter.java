@@ -16,6 +16,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -31,6 +32,7 @@ import java.math.BigDecimal;
  */
 @Slf4j
 @Component
+@Order(1)
 @RequiredArgsConstructor
 public class RazorpayAdapter implements GatewayPort {
 
