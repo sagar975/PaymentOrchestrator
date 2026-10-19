@@ -59,56 +59,35 @@ public class RazorpayAdapter implements GatewayPort {
      */
     @Override
     public GatewayResponse authorize(Transaction transaction) {
-        log.info("Authorizing transaction via Razorpay. txnId={}, amount={}",
-                transaction.getId(), transaction.getAmount());
+        log.info("Authorizing transaction via Razorpay. txnId={}, amount={}", transaction.getId(), transaction.getAmount());
 
         try {
             // Razorpay amount is in paise (smallest currency unit)
             // ₹999.99 = 99999 paise
-            long amountInPaise = transaction.getAmount()
-                    .multiply(BigDecimal.valueOf(100))
-                    .longValue();
+            long amountInPaise = transaction.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
 
-            String requestBody = objectMapper.writeValueAsString(
-                    new RazorpayOrderRequest(
-                            amountInPaise,
-                            transaction.getCurrency(),
-                            transaction.getIdempotencyKey()
-                    )
-            );
+            String requestBody = objectMapper.writeValueAsString(new RazorpayOrderRequest(amountInPaise, transaction.getCurrency(), transaction.getIdempotencyKey()));
 
-            Request request = new Request.Builder()
-                    .url(BASE_URL + "/orders")
-                    .addHeader("Authorization", Credentials.basic(
-                            razorpayConfig.getKeyId(),
-                            razorpayConfig.getKeySecret()))
-                    .post(RequestBody.create(requestBody, JSON))
-                    .build();
+            Request request = new Request.Builder().url(BASE_URL + "/orders").addHeader("Authorization", Credentials.basic(razorpayConfig.getKeyId(), razorpayConfig.getKeySecret())).post(RequestBody.create(requestBody, JSON)).build();
 
             try (Response response = httpClient.newCall(request).execute()) {
-                String responseBody = response.body() != null
-                        ? response.body().string() : "";
+                String responseBody = response.body() != null ? response.body().string() : "";
 
-                log.debug("Razorpay response. status={}, body={}",
-                        response.code(), responseBody);
+                log.debug("Razorpay response. status={}, body={}", response.code(), responseBody);
 
                 if (response.isSuccessful()) {
                     JsonNode json = objectMapper.readTree(responseBody);
                     String orderId = json.get("id").asText();
 
-                    log.info("Razorpay order created. orderId={}, txnId={}",
-                            orderId, transaction.getId());
+                    log.info("Razorpay order created. orderId={}, txnId={}", orderId, transaction.getId());
 
                     return GatewayResponse.success(orderId, responseBody);
                 } else {
                     JsonNode json = objectMapper.readTree(responseBody);
-                    String errorCode = json.path("error")
-                            .path("code").asText("GATEWAY_ERROR");
-                    String errorDesc = json.path("error")
-                            .path("description").asText("Unknown error");
+                    String errorCode = json.path("error").path("code").asText("GATEWAY_ERROR");
+                    String errorDesc = json.path("error").path("description").asText("Unknown error");
 
-                    log.warn("Razorpay rejected. code={}, desc={}, txnId={}",
-                            errorCode, errorDesc, transaction.getId());
+                    log.warn("Razorpay rejected. code={}, desc={}, txnId={}", errorCode, errorDesc, transaction.getId());
 
                     boolean retryable = isRetryable(response.code());
                     return GatewayResponse.failure(errorCode, errorDesc, responseBody);
@@ -116,21 +95,10 @@ public class RazorpayAdapter implements GatewayPort {
             }
         } catch (IOException e) {
             log.error("Razorpay network error. txnId={}", transaction.getId(), e);
-            throw new GatewayException(
-                    GATEWAY_NAME,
-                    "GATEWAY_TIMEOUT",
-                    "Razorpay is unreachable: " + e.getMessage(),
-                    true,
-                    e);
+            throw new GatewayException(GATEWAY_NAME, "GATEWAY_TIMEOUT", "Razorpay is unreachable: " + e.getMessage(), true, e);
         } catch (Exception e) {
-            log.error("Razorpay unexpected error. txnId={}",
-                    transaction.getId(), e);
-            throw new GatewayException(
-                    GATEWAY_NAME,
-                    "GATEWAY_ERROR",
-                    "Unexpected error calling Razorpay",
-                    false,
-                    e);
+            log.error("Razorpay unexpected error. txnId={}", transaction.getId(), e);
+            throw new GatewayException(GATEWAY_NAME, "GATEWAY_ERROR", "Unexpected error calling Razorpay", false, e);
         }
     }
 
@@ -140,31 +108,17 @@ public class RazorpayAdapter implements GatewayPort {
      */
     @Override
     public GatewayResponse capture(Transaction transaction) {
-        log.info("Capturing payment via Razorpay. txnId={}",
-                transaction.getId());
+        log.info("Capturing payment via Razorpay. txnId={}", transaction.getId());
 
         try {
-            long amountInPaise = transaction.getAmount()
-                    .multiply(BigDecimal.valueOf(100))
-                    .longValue();
+            long amountInPaise = transaction.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
 
-            String requestBody = objectMapper.writeValueAsString(
-                    new RazorpayCaptureRequest(amountInPaise,
-                            transaction.getCurrency())
-            );
+            String requestBody = objectMapper.writeValueAsString(new RazorpayCaptureRequest(amountInPaise, transaction.getCurrency()));
 
-            Request request = new Request.Builder()
-                    .url(BASE_URL + "/payments/"
-                            + transaction.getGatewayUsed() + "/capture")
-                    .addHeader("Authorization", Credentials.basic(
-                            razorpayConfig.getKeyId(),
-                            razorpayConfig.getKeySecret()))
-                    .post(RequestBody.create(requestBody, JSON))
-                    .build();
+            Request request = new Request.Builder().url(BASE_URL + "/payments/" + transaction.getGatewayUsed() + "/capture").addHeader("Authorization", Credentials.basic(razorpayConfig.getKeyId(), razorpayConfig.getKeySecret())).post(RequestBody.create(requestBody, JSON)).build();
 
             try (Response response = httpClient.newCall(request).execute()) {
-                String responseBody = response.body() != null
-                        ? response.body().string() : "";
+                String responseBody = response.body() != null ? response.body().string() : "";
 
                 if (response.isSuccessful()) {
                     JsonNode json = objectMapper.readTree(responseBody);
@@ -172,18 +126,13 @@ public class RazorpayAdapter implements GatewayPort {
                     return GatewayResponse.success(paymentId, responseBody);
                 } else {
                     JsonNode json = objectMapper.readTree(responseBody);
-                    String errorCode = json.path("error")
-                            .path("code").asText("CAPTURE_ERROR");
-                    String errorDesc = json.path("error")
-                            .path("description").asText("Capture failed");
-                    return GatewayResponse.failure(
-                            errorCode, errorDesc, responseBody);
+                    String errorCode = json.path("error").path("code").asText("CAPTURE_ERROR");
+                    String errorDesc = json.path("error").path("description").asText("Capture failed");
+                    return GatewayResponse.failure(errorCode, errorDesc, responseBody);
                 }
             }
         } catch (IOException e) {
-            throw new GatewayException(
-                    GATEWAY_NAME, "GATEWAY_TIMEOUT",
-                    "Razorpay capture failed: " + e.getMessage(), true, e);
+            throw new GatewayException(GATEWAY_NAME, "GATEWAY_TIMEOUT", "Razorpay capture failed: " + e.getMessage(), true, e);
         }
     }
 
@@ -192,30 +141,17 @@ public class RazorpayAdapter implements GatewayPort {
      */
     @Override
     public GatewayResponse refund(Transaction transaction) {
-        log.info("Refunding payment via Razorpay. txnId={}",
-                transaction.getId());
+        log.info("Refunding payment via Razorpay. txnId={}", transaction.getId());
 
         try {
-            long amountInPaise = transaction.getAmount()
-                    .multiply(BigDecimal.valueOf(100))
-                    .longValue();
+            long amountInPaise = transaction.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
 
-            String requestBody = objectMapper.writeValueAsString(
-                    new RazorpayRefundRequest(amountInPaise)
-            );
+            String requestBody = objectMapper.writeValueAsString(new RazorpayRefundRequest(amountInPaise));
 
-            Request request = new Request.Builder()
-                    .url(BASE_URL + "/payments/"
-                            + transaction.getGatewayUsed() + "/refund")
-                    .addHeader("Authorization", Credentials.basic(
-                            razorpayConfig.getKeyId(),
-                            razorpayConfig.getKeySecret()))
-                    .post(RequestBody.create(requestBody, JSON))
-                    .build();
+            Request request = new Request.Builder().url(BASE_URL + "/payments/" + transaction.getGatewayUsed() + "/refund").addHeader("Authorization", Credentials.basic(razorpayConfig.getKeyId(), razorpayConfig.getKeySecret())).post(RequestBody.create(requestBody, JSON)).build();
 
             try (Response response = httpClient.newCall(request).execute()) {
-                String responseBody = response.body() != null
-                        ? response.body().string() : "";
+                String responseBody = response.body() != null ? response.body().string() : "";
 
                 if (response.isSuccessful()) {
                     JsonNode json = objectMapper.readTree(responseBody);
@@ -223,18 +159,13 @@ public class RazorpayAdapter implements GatewayPort {
                     return GatewayResponse.success(refundId, responseBody);
                 } else {
                     JsonNode json = objectMapper.readTree(responseBody);
-                    String errorCode = json.path("error")
-                            .path("code").asText("REFUND_ERROR");
-                    String errorDesc = json.path("error")
-                            .path("description").asText("Refund failed");
-                    return GatewayResponse.failure(
-                            errorCode, errorDesc, responseBody);
+                    String errorCode = json.path("error").path("code").asText("REFUND_ERROR");
+                    String errorDesc = json.path("error").path("description").asText("Refund failed");
+                    return GatewayResponse.failure(errorCode, errorDesc, responseBody);
                 }
             }
         } catch (IOException e) {
-            throw new GatewayException(
-                    GATEWAY_NAME, "GATEWAY_TIMEOUT",
-                    "Razorpay refund failed: " + e.getMessage(), true, e);
+            throw new GatewayException(GATEWAY_NAME, "GATEWAY_TIMEOUT", "Razorpay refund failed: " + e.getMessage(), true, e);
         }
     }
 
