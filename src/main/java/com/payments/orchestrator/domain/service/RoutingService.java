@@ -132,11 +132,11 @@ public class RoutingService {
      */
     private List<String> getSupportedCurrencies(GatewayPort gateway) {
         return switch (gateway.getGatewayName()) {
-            case "razorpay" -> List.of("INR", "USD", "EUR", "GBP");
-            case "payu" -> List.of("INR");
-            case "cashfree" -> List.of("INR");
-            case "stripe" -> List.of("USD", "GBP", "EUR", "SGD", "AED");
-            default -> List.of("INR");
+            case "razorpay" -> List.of("INR");           // India only
+            case "payu"     -> List.of("INR");           // India only
+            case "cashfree" -> List.of("INR");           // India only
+            case "stripe"   -> List.of("USD", "GBP", "EUR", "SGD", "AED", "INR");
+            default         -> List.of("INR");
         };
     }
 }

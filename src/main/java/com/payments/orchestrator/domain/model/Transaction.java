@@ -137,7 +137,7 @@ public class Transaction {
      */
     private boolean isValidTransition(TransactionStatus from, TransactionStatus to) {
         return switch (from) {
-            case INITIATED -> to == TransactionStatus.ROUTING;
+            case INITIATED -> to == TransactionStatus.ROUTING || to == TransactionStatus.FAILED;
             case ROUTING -> to == TransactionStatus.AUTHORIZED
                     || to == TransactionStatus.FAILED;
             case AUTHORIZED -> to == TransactionStatus.CAPTURED

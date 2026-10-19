@@ -79,7 +79,14 @@ public class OrchestrationService {
         transactionRepository.saveEvent(new TransactionEvent(saved.getId(), null, TransactionStatus.INITIATED, null, "Transaction initiated successfully"));
 
         // Step 5 — select gateway via routing engine
-        GatewayPort selectedGateway = routingService.selectGateway(saved);
+        GatewayPort selectedGateway;
+        try {
+            selectedGateway = routingService.selectGateway(saved);
+        } catch (IllegalStateException e) {
+            log.warn("No gateway available. currency={}, txnId={}", saved.getCurrency(), saved.getId());
+
+            throw new PaymentException("UNSUPPORTED_CURRENCY", "No gateway available for currency: " + saved.getCurrency());
+        }
 
         // Step 6 — transition to ROUTING
         saved.transitionTo(TransactionStatus.ROUTING);
