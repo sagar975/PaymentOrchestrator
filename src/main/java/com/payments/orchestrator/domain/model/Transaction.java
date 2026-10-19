@@ -193,4 +193,30 @@ public class Transaction {
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
+
+    public static Transaction reconstitute(
+            UUID id,
+            String merchantId,
+            BigDecimal amount,
+            String currency,
+            TransactionStatus status,
+            String gatewayUsed,
+            String idempotencyKey,
+            int retryCount,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+
+        Transaction transaction = new Transaction();
+        transaction.id = id;
+        transaction.merchantId = merchantId;
+        transaction.amount = amount;
+        transaction.currency = currency;
+        transaction.status = status;
+        transaction.gatewayUsed = gatewayUsed;
+        transaction.idempotencyKey = idempotencyKey;
+        transaction.retryCount = retryCount;
+        transaction.createdAt = createdAt;
+        transaction.updatedAt = updatedAt;
+        return transaction;
+    }
 }
