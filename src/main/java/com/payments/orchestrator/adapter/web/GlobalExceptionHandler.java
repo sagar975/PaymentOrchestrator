@@ -1,4 +1,5 @@
 package com.payments.orchestrator.adapter.web;
+
 import com.payments.orchestrator.domain.exception.GatewayException;
 import com.payments.orchestrator.domain.exception.PaymentException;
 import lombok.extern.slf4j.Slf4j;
@@ -9,9 +10,12 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.springframework.web.bind.MissingRequestHeaderException;
 
 /**
  * Global exception handler for all REST endpoints.
@@ -138,6 +142,21 @@ public class GlobalExceptionHandler {
                         .status(500)
                         .error("INTERNAL_ERROR")
                         .message("An unexpected error occurred")
+                        .build());
+    }
+
+    // Add this method inside the class
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ErrorResponse> handleMissingHeader(
+            MissingRequestHeaderException ex) {
+        log.warn("Missing required header: {}", ex.getHeaderName());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.builder()
+                        .timestamp(LocalDateTime.now())
+                        .status(400)
+                        .error("MISSING_HEADER")
+                        .message("Required header missing: " + ex.getHeaderName())
                         .build());
     }
 }
