@@ -145,7 +145,6 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
-    // Add this method inside the class
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingHeader(
             MissingRequestHeaderException ex) {
