@@ -22,6 +22,7 @@ public class RecentTransactionsResponse {
     public static class TransactionSummary {
         private final UUID id;
         private final String merchantId;
+        private final String merchantName;
         private final BigDecimal amount;
         private final String currency;
         private final String status;
